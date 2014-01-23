@@ -64,4 +64,4 @@ The software is distributed under the terms of the GNU General Public License (v
 ## Credits
 
 * David Hart -- C++ NaCl/PNaCl porting and additions
-* Sebastian Macke [simulationcorner.net](http://simulationcorner.net) -- [JavaScript OpenRISC 1000 emulator](https://github.com/s-macke/jor1k/) and the JavaScript emulated terminal used by this project
+* Sebastian Macke ([simulationcorner.net](http://simulationcorner.net)) -- [JavaScript OpenRISC 1000 emulator](https://github.com/s-macke/jor1k/) and the JavaScript emulated terminal used by this project
