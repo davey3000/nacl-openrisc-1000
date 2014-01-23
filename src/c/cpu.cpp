@@ -84,6 +84,7 @@ CPU::CPU(pp::Instance* pp_instance)
   debug_message_count = 0;
   debug_instcount = 0;
   debug_pause_trace = false;
+  debug_point_en = false;
 
   // Some start-up assertions
   assert(sizeof(uint32_t) == sizeof(float));
@@ -945,65 +946,82 @@ void CPU::Step(int32_t steps, uint32_t clock_speed) {
       //DisassembleInstr(ins);
     //}
     // </DEBUG>
-    //if (debug_instcount > 3121959 && !debug_pause_trace) {
-    //  fprintf(stderr, "%lld: 0x%08x\n", debug_instcount, (pc << 2));
-    //}
-
+    if (debug_point_en) {
+      DisassembleInstr(ins);
+    }
     /* Decode and execute the fetched instruction */
     switch ((ins >> 26) & 0x3f) {
     case 0x0:
       // j
-      addr = pc + ((ins & 0x02000000)
-                   ? ((ins & 0x03FFFFFF) | 0xfc000000)
-                   : (ins & 0x03FFFFFF));
-      pc = next_pc;
-      next_pc = addr;
-      delayed_ins = true;
-      --steps;
-      continue;
-
+      if (!delayed_ins) {
+        addr = pc + ((ins & 0x02000000)
+                     ? ((ins & 0x03FFFFFF) | 0xfc000000)
+                     : (ins & 0x03FFFFFF));
+        pc = next_pc;
+        next_pc = addr;
+        delayed_ins = true;
+        --steps;
+        continue;
+      }
+      break;
+      
     case 0x1:
       // jal
-      addr = pc + ((ins & 0x02000000)
-                   ? ((ins & 0x03FFFFFF) | 0xfc000000)
-                   : (ins & 0x03FFFFFF));
-      rf.r[9] = (next_pc << 2) + 4;
-      pc = next_pc;
-      next_pc = addr;
-      delayed_ins = true;
-      --steps;
-      continue;
-
+      if (!delayed_ins) {
+        addr = pc + ((ins & 0x02000000)
+                     ? ((ins & 0x03FFFFFF) | 0xfc000000)
+                     : (ins & 0x03FFFFFF));
+        rf.r[9] = (next_pc << 2) + 4;
+        pc = next_pc;
+        next_pc = addr;
+        delayed_ins = true;
+        --steps;
+        continue;
+      }
+      break;
+      
     case 0x3:
       // bnf
-      if (SR_F) {
-        break;
+      if (!delayed_ins) {
+        if (SR_F) {
+          break;
+        }
+        addr = pc + ((ins & 0x02000000)
+                     ? ((ins & 0x03FFFFFF) | 0xfc000000)
+                     : (ins & 0x03FFFFFF));
+        pc = next_pc;
+        next_pc = addr;
+        delayed_ins = true;
+        --steps;
+        continue;
       }
-      addr = pc + ((ins & 0x02000000)
-                   ? ((ins & 0x03FFFFFF) | 0xfc000000)
-                   : (ins & 0x03FFFFFF));
-      pc = next_pc;
-      next_pc = addr;
-      delayed_ins = true;
-      --steps;
-      continue;
-        
+      break;
+      
     case 0x4:
       // bf
-      if (!SR_F) {
-        break;
+      if (!delayed_ins) {
+        if (!SR_F) {
+          break;
+        }
+        addr = pc + ((ins & 0x02000000)
+                     ? ((ins & 0x03FFFFFF) | 0xfc000000)
+                     : (ins & 0x03FFFFFF));
+        pc = next_pc;
+        next_pc = addr;
+        delayed_ins = true;
+        --steps;
+        continue;
       }
-      addr = pc + ((ins & 0x02000000)
-                   ? ((ins & 0x03FFFFFF) | 0xfc000000)
-                   : (ins & 0x03FFFFFF));
-      pc = next_pc;
-      next_pc = addr;
-      delayed_ins = true;
-      --steps;
-      continue;
+      break;
 
     case 0x5:
       // nop
+      imm = ins & 0xffff;
+      if (imm == 0x4) {
+        //fprintf(stderr, "CHAR: %c\n", rf.r[3] & 0xff, stderr);
+        putc(rf.r[3] & 0xff, stderr);
+        //debug_point_en = true;
+      }
       break;
 
     case 0x6:
@@ -1019,53 +1037,64 @@ void CPU::Step(int32_t steps, uint32_t clock_speed) {
         
     case 0x8:
       // sys
-      Exception(EXCEPT_SYSCALL, spr_generic_uint32[SPR_EEAR_BASE]);
+      if (!delayed_ins) {
+        Exception(EXCEPT_SYSCALL, spr_generic_uint32[SPR_EEAR_BASE]);
+      }
       break;
         
     case 0x9:
       // rfe
-      next_pc = (GetSPR(SPR_EPCR_BASE) >> 2);
-      SetFlags(GetSPR(SPR_ESR_BASE));
-
-      ipage_va = 0xffffffff;
-      dpage_rd_int8_va = 0xffffffff;
-      dpage_rd_uint8_va = 0xffffffff;
-      dpage_rd_int16_va = 0xffffffff;
-      dpage_rd_uint16_va = 0xffffffff;
-      dpage_rd_uint32_va = 0xffffffff;
-      dpage_wr_uint8_va = 0xffffffff;
-      dpage_wr_uint16_va = 0xffffffff;
-      dpage_wr_uint32_va = 0xffffffff;
-
-      debug_pause_trace = false;
+      if (!delayed_ins) {
+        next_pc = (GetSPR(SPR_EPCR_BASE) >> 2);
+        SetFlags(GetSPR(SPR_ESR_BASE));
+        
+        ipage_va = 0xffffffff;
+        dpage_rd_int8_va = 0xffffffff;
+        dpage_rd_uint8_va = 0xffffffff;
+        dpage_rd_int16_va = 0xffffffff;
+        dpage_rd_uint16_va = 0xffffffff;
+        dpage_rd_uint32_va = 0xffffffff;
+        dpage_wr_uint8_va = 0xffffffff;
+        dpage_wr_uint16_va = 0xffffffff;
+        dpage_wr_uint32_va = 0xffffffff;
+        
+        debug_pause_trace = false;
+      }
       break;
         
     case 0x11:
       // jr
-      addr = (rf.r[(ins >> 11) & 0x1F] >> 2);
-      pc = next_pc;
-      next_pc = addr;
-      delayed_ins = true;
-      --steps;
-      continue;
+      if (!delayed_ins) {
+        addr = (rf.r[(ins >> 11) & 0x1F] >> 2);
+        pc = next_pc;
+        next_pc = addr;
+        delayed_ins = true;
+        --steps;
+        continue;
+      } 
+      break;
 
     case 0x12:
       // jalr
-      addr = (rf.r[(ins >> 11) & 0x1F] >> 2);
-      rf.r[9] = (next_pc << 2) + 4;
-      pc = next_pc;
-      next_pc = addr;
-      delayed_ins = true;
-      --steps;
-      continue;
+      if (!delayed_ins) {
+        addr = (rf.r[(ins >> 11) & 0x1F] >> 2);
+        rf.r[9] = (next_pc << 2) + 4;
+        pc = next_pc;
+        next_pc = addr;
+        delayed_ins = true;
+        --steps;
+        continue;
+      }
+      break;
         
     case 0x21:
-      // lwz
+    case 0x22:
+      // lwz/lws
       addr = rf.r[(ins >> 16) & 0x1F] + ((ins & 0x00008000)
                                          ? ((ins & 0x0000ffff) | 0xffff0000)
                                          : (ins & 0x0000ffff));
       if (addr & 0x3) {
-        DebugMessage("Error in lwz: no unaligned access allowed");
+        DebugMessage("Error in lwz/lws: no unaligned access allowed");
       }
 
       if ((dpage_rd_uint32_va ^ addr) >> 13) {
@@ -1214,7 +1243,7 @@ void CPU::Step(int32_t steps, uint32_t clock_speed) {
       switch ((ins >> 6) & 0x3) {
       case 0:
         // slli
-        rf.r[(ins >> 21) & 0x1F] = rf.r[(ins >> 16) & 0x1F] << (ins & 0x1F);
+        rf.r[(ins >> 21) & 0x1F] = (rf.r[(ins >> 16) & 0x1F] << (ins & 0x1F));
         break;
       case 1:
         // srli
@@ -1225,10 +1254,11 @@ void CPU::Step(int32_t steps, uint32_t clock_speed) {
         // srai
         rA = rf.r[(ins >> 16) & 0x1f];
         rf.r[(ins >> 21) & 0x1f] = (rA >> (ins & 0x1f))
-          | ((rA & 0x80000000) ? (0xffffffff << (32 - (ins & 0x1f))) : 0);
+          | (((rA & 0x80000000) && (ins & 0x1f))
+             ? (0xffffffff << (32 - (ins & 0x1f))) : 0);
         break;
       default:
-        DebugMessage("Error: opcode 2E function not implemented");
+        DebugMessage("Error: l.rori opcode not implemented");
         break;
       }
       break;
@@ -1435,7 +1465,7 @@ void CPU::Step(int32_t steps, uint32_t clock_speed) {
       rA = rf.r[(ins >> 16) & 0x1f];
       rB = rf.r[(ins >> 11) & 0x1f];
       rindex = (ins >> 21) & 0x1f;
-      switch (ins & 0x3cf) {
+      switch (ins & 0x30f) {
       case 0x0:
         // add 
         rf.r[rindex] = rA + rB;
@@ -1457,12 +1487,26 @@ void CPU::Step(int32_t steps, uint32_t clock_speed) {
         rf.r[rindex] = rA ^ rB;
         break;
       case 0x8:
-        // sll
-        rf.r[rindex] = (rA << (rB & 0x1f));
-        break;
-      case 0x48:
-        // srl not signed
-        rf.r[rindex] = (rA >> (rB & 0x1f));
+        switch ((ins & 0xc0) >> 6) {
+        case 0:
+          // sll
+          rf.r[rindex] = (rA << (rB & 0x1f));
+          break;
+        case 1:
+          // srl not signed
+          rf.r[rindex] = (rA >> (rB & 0x1f));
+          break;
+        case 2:
+          // sra signed
+          rf.r[rindex] = (rA >> (rB & 0x1f))
+            | (((rA & 0x80000000) && (rB & 0x1f))
+               ? (0xffffffff << (32 - (rB & 0x1f))) : 0);
+          break;
+          
+        default:
+          DebugMessage("Error: op38 opcode 0x%03x not supported yet", (ins & 0x3cf));
+          break;
+        }
         break;
       case 0xf:
         // ff1
@@ -1473,11 +1517,6 @@ void CPU::Step(int32_t steps, uint32_t clock_speed) {
             break;
           }
         }
-        break;
-      case 0x88:
-        // sra signed
-        rf.r[rindex] = (rA >> (rB & 0x1f))
-          | ((rA & 0x80000000) ? (0xffffffff << (32 - (rB & 0x1f))) : 0);
         break;
       case 0x10f:
         // fl1
@@ -1521,7 +1560,7 @@ void CPU::Step(int32_t steps, uint32_t clock_speed) {
         }
         break;
       default:
-        DebugMessage("Error: op38 opcode not supported yet");
+        DebugMessage("Error: op38 opcode 0x%03x not supported yet", (ins & 0x3cf));
         break;
       }
       break;
@@ -1678,6 +1717,18 @@ void CPU::DisassembleInstr(uint32_t ins) {
       snprintf(decode_str, 100, "l.lwz r%d,I(r%d) (VA=0x%08x, PA=0x%08x, INVALID)", (ins >> 21) & 0x1F, (ins >> 16) & 0x1F, addr, paddr);
     } else {
       snprintf(decode_str, 100, "l.lwz r%d,I(r%d) (r%d=0x%08x, VA=0x%08x, PA=0x%08x)", (ins >> 21) & 0x1F, (ins >> 16) & 0x1F, (ins >> 21) & 0x1F, ram_uint32[paddr >> 2], addr, paddr);
+    }
+    break;
+
+  case 0x22:
+    addr = rf.r[(ins >> 16) & 0x1F] + ((ins & 0x00008000)
+                                       ? ((ins & 0x0000ffff) | 0xffff0000)
+                                       : (ins & 0x0000ffff));
+    paddr = DTLBLookupNoExceptions(addr, false);
+    if (paddr > (sizeof(char) * RAM_SIZE_BYTES)) {
+      snprintf(decode_str, 100, "l.lws r%d,I(r%d) (VA=0x%08x, PA=0x%08x, INVALID)", (ins >> 21) & 0x1F, (ins >> 16) & 0x1F, addr, paddr);
+    } else {
+      snprintf(decode_str, 100, "l.lws r%d,I(r%d) (r%d=0x%08x, VA=0x%08x, PA=0x%08x)", (ins >> 21) & 0x1F, (ins >> 16) & 0x1F, (ins >> 21) & 0x1F, ram_uint32[paddr >> 2], addr, paddr);
     }
     break;
 
@@ -1948,10 +1999,24 @@ void CPU::DisassembleInstr(uint32_t ins) {
       snprintf(decode_str, 100, "l.xor r%d,r%d,r%d (dest r%d=0x%08x)", rindex, (ins >> 16) & 0x1F, (ins >> 11) & 0x1F, rindex, rA ^ rB);
       break;
     case 0x8:
+      switch ((ins & 0xc0) >> 6) {
+      case 0:
+        // sll
       snprintf(decode_str, 100, "l.sll r%d,r%d,r%d (dest r%d=0x%08x)", rindex, (ins >> 16) & 0x1F, (ins >> 11) & 0x1F, rindex, rA << (rB & 0x1F));
-      break;
-    case 0x48:
-      snprintf(decode_str, 100, "l.srl r%d,r%d,r%d (dest r%d=0x%08x)", rindex, (ins >> 16) & 0x1F, (ins >> 11) & 0x1F, rindex, rA >> (rB & 0x1F));
+        break;
+      case 1:
+        // srl not signed
+        snprintf(decode_str, 100, "l.srl r%d,r%d,r%d (dest r%d=0x%08x)", rindex, (ins >> 16) & 0x1F, (ins >> 11) & 0x1F, rindex, rA >> (rB & 0x1F));
+        break;
+      case 2:
+        // sra signed
+        snprintf(decode_str, 100, "l.sra r%d,r%d,r%d (dest r%d=0x%08x)", rindex, (ins >> 16) & 0x1F, (ins >> 11) & 0x1F, rindex, rA >> (rB & 0x1F) | ((rA & 0x80000000) ? (0xffffffff << (32 - (rB & 0x1F))) : 0));
+        break;
+        
+      default:
+        DebugMessage("Error: op38 opcode 0x%03x not supported yet", (ins & 0x3cf));
+        break;
+      }
       break;
     case 0xf:
       result = 0;
@@ -1962,9 +2027,6 @@ void CPU::DisassembleInstr(uint32_t ins) {
         }
       }
       snprintf(decode_str, 100, "l.ff1 r%d,r%d,r%d (dest r%d=0x%08x)", rindex, (ins >> 16) & 0x1F, (ins >> 11) & 0x1F, rindex, result);
-      break;
-    case 0x88:
-      snprintf(decode_str, 100, "l.sra r%d,r%d,r%d (dest r%d=0x%08x)", rindex, (ins >> 16) & 0x1F, (ins >> 11) & 0x1F, rindex, rA >> (rB & 0x1F) | ((rA & 0x80000000) ? (0xffffffff << (32 - (rB & 0x1F))) : 0));
       break;
     case 0x10f:
       result = 0;

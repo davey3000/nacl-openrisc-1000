@@ -158,6 +158,7 @@ public:
   uint32_t debug_message_count;
   uint64_t debug_instcount;
   bool debug_pause_trace;
+  bool debug_point_en;
   
 public:
   CPU(pp::Instance* pp_instance);

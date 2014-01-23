@@ -18,7 +18,6 @@ limitations:
 
 * The Ethernet device is not emulated.
 * The Touchscreen device is not emulated.
-* There is a bug that causes image corruption when decoding JPEGs.
 
 In terms of differences in emulated hardware, this emulator has 128MB of RAM by
 default, a 200MB hard disk image and a 120 x 40 terminal window (1680x1050 or
