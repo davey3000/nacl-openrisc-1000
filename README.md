@@ -1,5 +1,7 @@
 # NaCl/PNaCl OpenRISC 1000 Emulator
 
+[![screenshot](https://raw2.github.com/davey3000/nacl-openrisc-1000/gh-pages/img/screenshot01_small.png)](https://raw2.github.com/davey3000/nacl-openrisc-1000/gh-pages/img/screenshot01.png)
+
 *Version:* 0.0.1
 
 An experimental port of the JavaScript OpenRISC 1000 emulator to C++ using
