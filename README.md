@@ -1,6 +1,6 @@
-# OpenRISC 1000 NaCl/PNaCl emulator
+# NaCl/PNaCl OpenRISC 1000 Emulator
 
-Version 0.0.1
+*Version:* 0.0.1
 
 An experimental port of the JavaScript OpenRISC 1000 emulator to C++ using
 Chrome's NaCl/PNaCl libraries, allowing it to be run in the Chrome browser or
@@ -36,13 +36,13 @@ A suitable version of the Pepper SDK tools must be installed. Consult the
 
 The environment variables `NACL_ARCH` and `NACL_SDK_ROOT` should be set
 appropriately (the former indicating the target architecture, e.g. `pnacl`;
-the later indicating the path to the Pepper SDK).
+the latter indicating the path to the Pepper SDK).
 
 The BZip2 library must be present in the Pepper SDK area. For information on
-how to do build and install this library, please consult the [NaClPorts
+how to build and install this library, please consult the [NaClPorts
 repository](http://code.google.com/p/naclports).
 
-To make the development build and place the result under `dist/rel`:
+To make the development build and place the result under `./dist/`:
 
 ```
 make

@@ -1,0 +1,10 @@
+{
+  "program": {
+    "portable": {
+      "pnacl-translate": {
+        "url": "or_emulator.pexe",
+        "optlevel": 2
+      }
+    }
+  }
+}

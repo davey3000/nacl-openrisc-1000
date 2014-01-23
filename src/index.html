@@ -1,0 +1,24 @@
+<!DOCTYPE xhtml>
+<html>
+<head>
+  <title>OpenRisc Emulator</title>
+
+  <link href="css/main.css" rel="stylesheet" />
+</head>
+<body onload="pageDidLoad()">
+  <div id="listener">
+    <canvas id="or-terminal" class="screen" width="960" height="640">
+    </canvas>
+    
+    <embed id="or-emulator"
+           class="screen"
+           width="640" height="400"
+           src="or_emulator.nmf"
+           type="application/x-pnacl" />
+  </div>
+
+  <script src="js/terminal.js"></script>
+  <script src="js/terminal-input.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
