@@ -1,6 +1,7 @@
 \#*
 *~
 *.o
+*.bc
 *.pexe
 NOTES
 test.pl
