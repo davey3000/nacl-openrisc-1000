@@ -6,7 +6,7 @@
 
 An experimental port of the JavaScript OpenRISC 1000 emulator to C++ using
 Chrome's NaCl/PNaCl libraries, allowing it to be run in the Chrome browser or
-Chrome OS.
+Chrome OS (_not_ Chrome for Android/iOS).
 
 A demo is available [here](http://davey3000.github.io/nacl-openrisc-1000).  This
 provides a basic Linux build with a few fun terminal programs in `/usr/bin`.
