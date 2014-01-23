@@ -953,67 +953,57 @@ void CPU::Step(int32_t steps, uint32_t clock_speed) {
     switch ((ins >> 26) & 0x3f) {
     case 0x0:
       // j
-      if (!delayed_ins) {
-        addr = pc + ((ins & 0x02000000)
-                     ? ((ins & 0x03FFFFFF) | 0xfc000000)
-                     : (ins & 0x03FFFFFF));
-        pc = next_pc;
-        next_pc = addr;
-        delayed_ins = true;
-        --steps;
-        continue;
-      }
-      break;
+      addr = pc + ((ins & 0x02000000)
+                   ? ((ins & 0x03FFFFFF) | 0xfc000000)
+                   : (ins & 0x03FFFFFF));
+      pc = next_pc;
+      next_pc = addr;
+      delayed_ins = true;
+      --steps;
+      continue;
       
     case 0x1:
       // jal
+      addr = pc + ((ins & 0x02000000)
+                   ? ((ins & 0x03FFFFFF) | 0xfc000000)
+                   : (ins & 0x03FFFFFF));
       if (!delayed_ins) {
-        addr = pc + ((ins & 0x02000000)
-                     ? ((ins & 0x03FFFFFF) | 0xfc000000)
-                     : (ins & 0x03FFFFFF));
         rf.r[9] = (next_pc << 2) + 4;
-        pc = next_pc;
-        next_pc = addr;
-        delayed_ins = true;
-        --steps;
-        continue;
       }
-      break;
+      pc = next_pc;
+      next_pc = addr;
+      delayed_ins = true;
+      --steps;
+      continue;
       
     case 0x3:
       // bnf
-      if (!delayed_ins) {
-        if (SR_F) {
-          break;
-        }
-        addr = pc + ((ins & 0x02000000)
-                     ? ((ins & 0x03FFFFFF) | 0xfc000000)
-                     : (ins & 0x03FFFFFF));
-        pc = next_pc;
-        next_pc = addr;
-        delayed_ins = true;
-        --steps;
-        continue;
+      if (SR_F) {
+        break;
       }
-      break;
+      addr = pc + ((ins & 0x02000000)
+                   ? ((ins & 0x03FFFFFF) | 0xfc000000)
+                   : (ins & 0x03FFFFFF));
+      pc = next_pc;
+      next_pc = addr;
+      delayed_ins = true;
+      --steps;
+      continue;
       
     case 0x4:
       // bf
-      if (!delayed_ins) {
-        if (!SR_F) {
-          break;
-        }
-        addr = pc + ((ins & 0x02000000)
-                     ? ((ins & 0x03FFFFFF) | 0xfc000000)
-                     : (ins & 0x03FFFFFF));
-        pc = next_pc;
-        next_pc = addr;
-        delayed_ins = true;
-        --steps;
-        continue;
+      if (!SR_F) {
+        break;
       }
-      break;
-
+      addr = pc + ((ins & 0x02000000)
+                   ? ((ins & 0x03FFFFFF) | 0xfc000000)
+                   : (ins & 0x03FFFFFF));
+      pc = next_pc;
+      next_pc = addr;
+      delayed_ins = true;
+      --steps;
+      continue;
+      
     case 0x5:
       // nop
       imm = ins & 0xffff;
@@ -1064,28 +1054,24 @@ void CPU::Step(int32_t steps, uint32_t clock_speed) {
         
     case 0x11:
       // jr
-      if (!delayed_ins) {
-        addr = (rf.r[(ins >> 11) & 0x1F] >> 2);
-        pc = next_pc;
-        next_pc = addr;
-        delayed_ins = true;
-        --steps;
-        continue;
-      } 
-      break;
-
+      addr = (rf.r[(ins >> 11) & 0x1F] >> 2);
+      pc = next_pc;
+      next_pc = addr;
+      delayed_ins = true;
+      --steps;
+      continue;
+      
     case 0x12:
       // jalr
+      addr = (rf.r[(ins >> 11) & 0x1F] >> 2);
       if (!delayed_ins) {
-        addr = (rf.r[(ins >> 11) & 0x1F] >> 2);
         rf.r[9] = (next_pc << 2) + 4;
-        pc = next_pc;
-        next_pc = addr;
-        delayed_ins = true;
-        --steps;
-        continue;
       }
-      break;
+      pc = next_pc;
+      next_pc = addr;
+      delayed_ins = true;
+      --steps;
+      continue;
         
     case 0x21:
     case 0x22:
