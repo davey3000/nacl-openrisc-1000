@@ -2,13 +2,13 @@
 
 [![screenshot](https://raw2.github.com/davey3000/nacl-openrisc-1000/gh-pages/img/screenshot01_small.png)](https://raw2.github.com/davey3000/nacl-openrisc-1000/gh-pages/img/screenshot01.png)
 
-*Version:* 0.0.1
+**Version:** 0.0.1
 
-An experimental port of the JavaScript OpenRISC 1000 emulator to C++ using
+An experimental port of the [JavaScript OpenRISC 1000 emulator](https://github.com/s-macke/jor1k/) to C++ using
 Chrome's NaCl/PNaCl libraries, allowing it to be run in the Chrome browser or
 Chrome OS (_not_ Chrome for Android/iOS).
 
-A demo is available [here](http://davey3000.github.io/nacl-openrisc-1000).  This
+[**A demo is available**](http://davey3000.github.io/nacl-openrisc-1000).  This
 provides a basic Linux build with a few fun terminal programs in `/usr/bin`.
 
 ## Limitations
@@ -34,7 +34,7 @@ higher screen resolution recommended).
 ### Build process
 
 A suitable version of the Pepper SDK tools must be installed. Consult the
-[Pepper SDK download](https://developers.google.com/native-client/sdk/download) page for details.
+[Pepper SDK download page](https://developers.google.com/native-client/sdk/download) for details.
 
 The environment variables `NACL_ARCH` and `NACL_SDK_ROOT` should be set
 appropriately (the former indicating the target architecture, e.g. `pnacl`;
@@ -63,4 +63,4 @@ The software is distributed under the terms of the GNU General Public License (v
 ## Credits
 
 * David Hart -- C++ NaCl/PNaCl porting and additions
-* Sebastian Macke [simulationcorner.net](http://simulationcorner.net) -- [JavaScript OpenRISC 1000 emulator](https://github.com/s-macke/jor1k/) and the JavaScript emulated terminal used by this project
+* Sebastian Macke ([simulationcorner.net](http://simulationcorner.net)) -- [JavaScript OpenRISC 1000 emulator](https://github.com/s-macke/jor1k/) and the JavaScript emulated terminal used by this project
