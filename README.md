@@ -4,7 +4,7 @@
 
 **Version:** 0.0.1
 
-An experimental port of the JavaScript OpenRISC 1000 emulator to C++ using
+An experimental port of the [JavaScript OpenRISC 1000 emulator](https://github.com/s-macke/jor1k/) to C++ using
 Chrome's NaCl/PNaCl libraries, allowing it to be run in the Chrome browser or
 Chrome OS (_not_ Chrome for Android/iOS).
 
