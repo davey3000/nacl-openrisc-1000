@@ -79,8 +79,6 @@ CPU::CPU(pp::Instance* pp_instance)
     }
   }
 
-  Reset();
-
   debug_message_count = 0;
   debug_instcount = 0;
   debug_pause_trace = false;
@@ -111,20 +109,20 @@ CPU::~CPU() {
   }
 }
 
-void CPU::Reset() {
+inline void CPU::Reset(uint32_t& pc, uint32_t& next_pc) {
   std::lock_guard<std::mutex> lock(interrupt_mutex);
 
-  uint32_t i;
-
+  int32_t i;
+  
   delayed_ins = false;
-
+  
   spr_generic_uint32[SPR_IMMUCFGR] = 0x1c; // 0 ITLB has one way and 128 sets
   spr_generic_uint32[SPR_DMMUCFGR] = 0x1c; // 0 DTLB has one way and 128 sets
-  Exception(EXCEPT_RESET, 0x0); // Set nextpc value
-
+  Exception(EXCEPT_RESET, 0x0, pc, next_pc); // Set nextpc value
+  
   pc = next_pc;
   ++next_pc;
-
+  
   ipage_va = 0xffffffff;
   dpage_rd_int8_va = 0xffffffff;
   dpage_rd_uint8_va = 0xffffffff;
@@ -134,18 +132,18 @@ void CPU::Reset() {
   dpage_wr_uint8_va = 0xffffffff;
   dpage_wr_uint16_va = 0xffffffff;
   dpage_wr_uint32_va = 0xffffffff;
-
+  
   // REVISIT: is this necessary or can the regfile state be unpredictable after reset?
   for (i = 0; i < 32; ++i) {
     rf.r[i] = 0;
   }
-
+  
   TTMR = 0x0;
   TTCR = 0x0;
-
+  
   PICMR = 0x3;
   PICSR = 0x0;
-
+  
   SR_SM = true;
   SR_TEE = false;
   SR_IEE = false;
@@ -588,7 +586,8 @@ inline uint32_t CPU::GetSPR(uint32_t idx) {
   }
 }
 
-inline void CPU::Exception(uint32_t except_type, uint32_t addr) {
+inline void CPU::Exception(uint32_t except_type, uint32_t addr,
+                           uint32_t& pc, uint32_t& next_pc) {
   uint32_t except_vector = except_type | (SR_EPH ? 0xf0000000 : 0x0);
 
   //fprintf(stderr, "INFO (CPU): raising exception 0x%03x\n", except_type);
@@ -659,18 +658,21 @@ inline void CPU::Exception(uint32_t except_type, uint32_t addr) {
 }
 
 // REVISIT: emulate hardware refill to boost emulator performance?
-inline bool CPU::DTLBRefill(uint32_t addr, uint32_t nsets) {
-  Exception(EXCEPT_DTLBMISS, addr);
+inline bool CPU::DTLBRefill(uint32_t addr, uint32_t nsets,
+                            uint32_t& pc, uint32_t& next_pc) {
+  Exception(EXCEPT_DTLBMISS, addr, pc, next_pc);
   return false;
 }
 
 // REVISIT: emulate hardware refill to boost emulator performance?
-inline bool CPU::ITLBRefill(uint32_t addr, uint32_t nsets) {
-  Exception(EXCEPT_ITLBMISS, addr);
+inline bool CPU::ITLBRefill(uint32_t addr, uint32_t nsets,
+                            uint32_t& pc, uint32_t& next_pc) {
+  Exception(EXCEPT_ITLBMISS, addr, pc, next_pc);
   return false;
 }
 
-inline uint32_t CPU::DTLBLookup(uint32_t addr, bool write) {
+inline uint32_t CPU::DTLBLookup(uint32_t addr, bool write,
+                                uint32_t& pc, uint32_t& next_pc) {
   uint32_t setindex;
   uint32_t tlmbr;
   uint32_t tlbtr;
@@ -688,7 +690,7 @@ inline uint32_t CPU::DTLBLookup(uint32_t addr, bool write) {
   tlmbr = spr_dtlb_uint32[0x200 | setindex];
 
   if (!(tlmbr & 1) || (tlmbr >> 19) != (addr >> 19)) {
-    if (DTLBRefill(addr, 64)) {
+    if (DTLBRefill(addr, 64, pc, next_pc)) {
       tlmbr = spr_dtlb_uint32[0x200 + setindex];
     } else {
       return 0xffffffff;
@@ -702,14 +704,14 @@ inline uint32_t CPU::DTLBLookup(uint32_t addr, bool write) {
     if (((!write) && !(tlbtr & 0x100)) || // check if SRE
         ((write) && !(tlbtr & 0x200))     // check if SWE
         ) {
-      Exception(EXCEPT_DPF, addr);
+      Exception(EXCEPT_DPF, addr, pc, next_pc);
       return 0xffffffff;
     }
   } else {
     if (((!write) && !(tlbtr & 0x40)) || // check if URE
         ((write) && !(tlbtr & 0x80))     // check if UWE
         ) {
-      Exception(EXCEPT_DPF, addr);
+      Exception(EXCEPT_DPF, addr, pc, next_pc);
       return 0xffffffff;
     }
   }
@@ -823,21 +825,28 @@ void CPU::WriteMem32(uint32_t addr, uint32_t data) {
  * Execute instructions on the virtual machine in the main emulator execution
  * loop
  */
-void CPU::Step() {
+void CPU::Run() {
   register uint32_t ins;
-  register uint32_t rindex;
-  register uint32_t unsigned_imm;
-  register uint32_t imm;
-  register uint32_t addr;
-  register uint32_t paddr;
-  register uint32_t rA;
-  register uint32_t rB;
-  register uint32_t rD;
+  uint32_t rindex;
+  uint32_t unsigned_imm;
+  uint32_t imm;
+  uint32_t addr;
+  uint32_t paddr;
+  uint32_t rA;
+  uint32_t rB;
+  uint32_t rD;
+  register uint32_t pc;
+  register uint32_t next_pc;
   register uint8_t steps;
   register int8_t i;
 
   steps = 0xff;
 
+  Reset(pc, next_pc);
+
+  /*
+   * Main execution loop
+   */
   do {
 
     /* Handle timer updates and interrupt handling */
@@ -866,7 +875,7 @@ void CPU::Step() {
       // If a timer interrupt is pending and enabled then raise it
       if (TTMR & 0x10000000) {
         if (SR_TEE) {
-          Exception(EXCEPT_TICK, spr_generic_uint32[SPR_EEAR_BASE]);
+          Exception(EXCEPT_TICK, spr_generic_uint32[SPR_EEAR_BASE], pc, next_pc);
           pc = next_pc++;
         }
       } else {
@@ -875,7 +884,7 @@ void CPU::Step() {
         std::lock_guard<std::mutex> lock(interrupt_mutex);
 
         if (SR_IEE && (PICMR & PICSR)) {
-          Exception(EXCEPT_INT, spr_generic_uint32[SPR_EEAR_BASE]);
+          Exception(EXCEPT_INT, spr_generic_uint32[SPR_EEAR_BASE], pc, next_pc);
           pc = next_pc++;
         }
       }
@@ -901,7 +910,7 @@ void CPU::Step() {
         // the PC).  On a miss, request a refill of the TLB entry
         if (!(tlmbr & 1) ||
             (tlmbr >> 19) != (pc >> 17)) {
-          if (ITLBRefill(pc << 2, 64)) {
+          if (ITLBRefill(pc << 2, 64, pc, next_pc)) {
             tlmbr = spr_itlb_uint32[0x200 | setindex];
           } else {
             pc = next_pc++;
@@ -1016,7 +1025,7 @@ void CPU::Step() {
     case 0x8:
       // sys
       if (!delayed_ins) {
-        Exception(EXCEPT_SYSCALL, spr_generic_uint32[SPR_EEAR_BASE]);
+        Exception(EXCEPT_SYSCALL, spr_generic_uint32[SPR_EEAR_BASE], pc, next_pc);
       }
       break;
         
@@ -1072,7 +1081,7 @@ void CPU::Step() {
       }
 
       if ((dpage_rd_uint32_va ^ addr) >> 13) {
-        paddr = DTLBLookup(addr, false);
+        paddr = DTLBLookup(addr, false, pc, next_pc);
         if (paddr == 0xffffffff) {
           break;
         }
@@ -1095,7 +1104,7 @@ void CPU::Step() {
                                          : (ins & 0x0000ffff));
 
       if ((dpage_rd_uint8_va ^ addr) >> 13) {
-        paddr = DTLBLookup(addr, false);
+        paddr = DTLBLookup(addr, false, pc, next_pc);
         if (paddr == 0xffffffff) {
           break;
         }
@@ -1118,7 +1127,7 @@ void CPU::Step() {
                                          : (ins & 0x0000ffff));
 
       if ((dpage_rd_int8_va ^ addr) >> 13) {
-        paddr = DTLBLookup(addr, false);
+        paddr = DTLBLookup(addr, false, pc, next_pc);
         if (paddr == 0xffffffff) {
           break;
         }
@@ -1141,7 +1150,7 @@ void CPU::Step() {
                                          : (ins & 0x0000ffff));
 
       if ((dpage_rd_uint16_va ^ addr) >> 13) {
-        paddr = DTLBLookup(addr, false);
+        paddr = DTLBLookup(addr, false, pc, next_pc);
         if (paddr == 0xffffffff) {
           break;
         }
@@ -1166,7 +1175,7 @@ void CPU::Step() {
                                          : (ins & 0x0000ffff));
 
       if ((dpage_rd_int16_va ^ addr) >> 13) {
-        paddr = DTLBLookup(addr, false);
+        paddr = DTLBLookup(addr, false, pc, next_pc);
         if (paddr == 0xffffffff) {
           break;
         }
@@ -1370,7 +1379,7 @@ void CPU::Step() {
       }
 
       if ((dpage_wr_uint32_va ^ addr) >> 13) {
-        paddr = DTLBLookup(addr, true);
+        paddr = DTLBLookup(addr, true, pc, next_pc);
         if (paddr == 0xffffffff) {
           break;
         }
@@ -1394,7 +1403,7 @@ void CPU::Step() {
       addr = rf.r[(ins >> 16) & 0x1F] + imm;
 
       if ((dpage_wr_uint8_va ^ addr) >> 13) {
-        paddr = DTLBLookup(addr, true);
+        paddr = DTLBLookup(addr, true, pc, next_pc);
         if (paddr == 0xffffffff) {
           break;
         }
@@ -1417,7 +1426,7 @@ void CPU::Step() {
       addr = rf.r[(ins >> 16) & 0x1F] + imm;
 
       if ((dpage_wr_uint16_va ^ addr) >> 13) {
-        paddr = DTLBLookup(addr, true);
+        paddr = DTLBLookup(addr, true, pc, next_pc);
         if (paddr == 0xffffffff) {
           break;
         }
@@ -1599,7 +1608,7 @@ void CPU::Step() {
 
 // Disassembles the passed instruction code in the current emulator context.
 // Should be called _before_ the instruction is executed
-void CPU::DisassembleInstr(uint32_t ins) {
+void CPU::DisassembleInstr(uint32_t ins, uint32_t pc, uint32_t next_pc) {
   char* decode_str;
   uint32_t rindex;
   uint32_t unsigned_imm;

@@ -90,11 +90,6 @@ private:
   Device* ata_device;
   Device* kb_device;
 
-  // Program counter trackers (instruction indices, so refer to the locations
-  // of aligned multiples of 4 bytes)
-  uint32_t pc;
-  uint32_t next_pc;
-
   // Cycle counters (shared)
   std::atomic<uint64_t> cycle_count;
 
@@ -169,7 +164,7 @@ public:
   CPU(pp::Instance* pp_instance);
   virtual ~CPU();
 
-  virtual void Reset();
+  virtual void Reset(uint32_t& pc, uint32_t& next_pc);
   bool LoadRAMImage(const std::string& file_name);
   bool LoadHDDImage(const std::string& file_name);
   virtual void AnalyzeImage();
@@ -186,7 +181,7 @@ public:
 
   // Execute opcodes on the virtual CPU.  Should be run in a separate thread
   // from the main module thread
-  virtual void Step();
+  virtual void Run();
 
   /*
    * Signal external messages to the CPU (probably for passing on to devices).
@@ -213,10 +208,14 @@ protected:
   virtual uint32_t GetFlags();
   virtual void SetSPR(uint32_t idx, uint32_t x);
   virtual uint32_t GetSPR(uint32_t idx);
-  void Exception(uint32_t except_type, uint32_t addr);
-  bool DTLBRefill(uint32_t addr, uint32_t nsets);
-  bool ITLBRefill(uint32_t addr, uint32_t nsets);
-  uint32_t DTLBLookup(uint32_t addr, bool write);
+  void Exception(uint32_t except_type, uint32_t addr,
+                 uint32_t& pc, uint32_t& next_pc);
+  bool DTLBRefill(uint32_t addr, uint32_t nsets,
+                  uint32_t& pc, uint32_t& next_pc);
+  bool ITLBRefill(uint32_t addr, uint32_t nsets,
+                  uint32_t& pc, uint32_t& next_pc);
+  uint32_t DTLBLookup(uint32_t addr, bool write,
+                      uint32_t& pc, uint32_t& next_pc);
   uint32_t DTLBLookupNoExceptions(uint32_t addr, bool write);
   
   // Device access operations (by physical address)
@@ -229,7 +228,7 @@ protected:
 
   // Disassemble the indicated instruction with the current CPU state and
   // send the result as a debug message
-  virtual void DisassembleInstr(uint32_t ins);
+  virtual void DisassembleInstr(uint32_t ins, uint32_t pc, uint32_t next_pc);
   
 };
 
