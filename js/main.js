@@ -1,6 +1,7 @@
 
 var OREmulatorModule = null;  // Global application object.
 var emulatorTerminal = null;
+var perfValue = null;
 
 function DebugMessage(message) {
   console.log(message);
@@ -49,14 +50,36 @@ function moduleDidLoad() {
   // Indicate module load success
   OREmulatorModule = document.getElementById('or-emulator');
   logToTerminal('Successfully loaded module');
+
+  // Start up the cycle count requester
+  setInterval(function () {
+    OREmulatorModule.postMessage(0x05000000);
+  }, 1000);
 }
 
 function handleMessage(message_event) {
   if (typeof message_event.data === 'string') {
     console.log(message_event.data);
-  } else if (typeof message_event.data === 'number'
-             && emulatorTerminal !== null) {
-    emulatorTerminal.term.PutChar(message_event.data);
+  } else if (typeof message_event.data === 'number') {
+    msgType = message_event.data >>> 24;
+    msg = message_event.data & 0x00ffffff;
+
+    switch (msgType) {
+    case 0x00:
+      // Character to send to the emulated terminal display
+      if (emulatorTerminal !== null) {
+        emulatorTerminal.term.PutChar(msg);
+      }
+      break;
+    case 0x01:
+      // MIPS value
+      perfValue.innerHTML = msg + ' MIPS';
+      break;
+      
+    default:
+      break;
+    }
+    
   } else {
     console.log('ERROR: unexpected message type from OpenRISC emulator');
   }
@@ -70,6 +93,8 @@ function pageDidLoad() {
   if (OREmulatorModule == null) {
     logToTerminal('Loading module...');
   }
+  
+  perfValue = document.getElementById('perf-value');
 }
 
 function logToTerminal(msg) {
