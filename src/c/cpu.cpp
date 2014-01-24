@@ -117,7 +117,6 @@ void CPU::Reset() {
   uint32_t i;
 
   delayed_ins = false;
-  //interrupt_pending = false;
 
   spr_generic_uint32[SPR_IMMUCFGR] = 0x1c; // 0 ITLB has one way and 128 sets
   spr_generic_uint32[SPR_DMMUCFGR] = 0x1c; // 0 DTLB has one way and 128 sets
@@ -328,7 +327,7 @@ void CPU::AnalyzeImage() {
     | (ram_uint32[0x201C >> 2] & 0xFFFF);
 }
 
-void CPU::SetFlags(uint32_t x) {
+inline void CPU::SetFlags(uint32_t x) {
   //const uint32_t prev_SR_IEE = SR_IEE;
   const uint32_t prev_SR_DME = SR_DME;
   const uint32_t prev_SR_IME = SR_IME;
@@ -365,11 +364,6 @@ void CPU::SetFlags(uint32_t x) {
     DebugMessage("SetFlags() error: delay slot exception not supported");
   }
 
-  //if (SR_IEE && !prev_SR_IEE) {
-    //std::lock_guard<std::mutex> lock(interrupt_mutex);
-
-    //CheckForInterrupt();
-  //}
   if (!SR_IME && prev_SR_IME) {
     ipage_va = 0;
     ipage_adj_va = 0;
@@ -394,7 +388,7 @@ void CPU::SetFlags(uint32_t x) {
   }
 }
 
-uint32_t CPU::GetFlags() {
+inline uint32_t CPU::GetFlags() {
   //std::lock_guard<std::mutex> lock(interrupt_mutex);
   uint32_t x = 0;
 
@@ -420,20 +414,10 @@ uint32_t CPU::GetFlags() {
   return x;
 }
 
-//void CPU::CheckForInterrupt() {
-//  if (!SR_IEE) {
-//    return;
-//  }
-//  if (PICMR & PICSR) {
-//    interrupt_pending = true;
-//  }
-//}
-  
 void CPU::RaiseInterrupt(uint32_t line) {
   std::lock_guard<std::mutex> lock(interrupt_mutex);
 
   PICSR |= (1 << line);
-  //CheckForInterrupt();
 }
 
 void CPU::ClearInterrupt(uint32_t line) {
@@ -442,7 +426,7 @@ void CPU::ClearInterrupt(uint32_t line) {
   PICSR &= ~(1 << line);
 }
 
-void CPU::SetSPR(uint32_t idx, uint32_t x) {
+inline void CPU::SetSPR(uint32_t idx, uint32_t x) {
   uint32_t address = idx & 0x7FF;
   uint32_t group = (idx >> 11) & 0x1F;
 
@@ -525,7 +509,7 @@ void CPU::SetSPR(uint32_t idx, uint32_t x) {
   }
 }
   
-uint32_t CPU::GetSPR(uint32_t idx) {
+inline uint32_t CPU::GetSPR(uint32_t idx) {
   uint32_t address = idx & 0x7FF;
   uint32_t group = (idx >> 11) & 0x1F;
 
@@ -604,7 +588,7 @@ uint32_t CPU::GetSPR(uint32_t idx) {
   }
 }
 
-void CPU::Exception(uint32_t except_type, uint32_t addr) {
+inline void CPU::Exception(uint32_t except_type, uint32_t addr) {
   uint32_t except_vector = except_type | (SR_EPH ? 0xf0000000 : 0x0);
 
   //fprintf(stderr, "INFO (CPU): raising exception 0x%03x\n", except_type);
@@ -674,19 +658,19 @@ void CPU::Exception(uint32_t except_type, uint32_t addr) {
   delayed_ins = false;
 }
 
-// REVISIT: emulate hardware refill to boost emulator performance
-bool CPU::DTLBRefill(uint32_t addr, uint32_t nsets) {
+// REVISIT: emulate hardware refill to boost emulator performance?
+inline bool CPU::DTLBRefill(uint32_t addr, uint32_t nsets) {
   Exception(EXCEPT_DTLBMISS, addr);
   return false;
 }
 
-// REVISIT: emulate hardware refill to boost emulator performance
-bool CPU::ITLBRefill(uint32_t addr, uint32_t nsets) {
+// REVISIT: emulate hardware refill to boost emulator performance?
+inline bool CPU::ITLBRefill(uint32_t addr, uint32_t nsets) {
   Exception(EXCEPT_ITLBMISS, addr);
   return false;
 }
 
-uint32_t CPU::DTLBLookup(uint32_t addr, bool write) {
+inline uint32_t CPU::DTLBLookup(uint32_t addr, bool write) {
   uint32_t setindex;
   uint32_t tlmbr;
   uint32_t tlbtr;
@@ -732,7 +716,7 @@ uint32_t CPU::DTLBLookup(uint32_t addr, bool write) {
   return ((tlbtr & 0xFFFFE000) | (addr & 0x1FFF));
 }
 
-uint32_t CPU::DTLBLookupNoExceptions(uint32_t addr, bool write) {
+inline uint32_t CPU::DTLBLookupNoExceptions(uint32_t addr, bool write) {
   uint32_t setindex;
   uint32_t tlmbr;
   uint32_t tlbtr;
@@ -773,7 +757,7 @@ uint32_t CPU::DTLBLookupNoExceptions(uint32_t addr, bool write) {
   return ((tlbtr & 0xFFFFE000) | (addr & 0x1FFF));
 }
 
-uint8_t CPU::ReadDevMem8(uint32_t addr) {
+inline uint8_t CPU::ReadDevMem8(uint32_t addr) {
   if ((addr & 0xf0000000) == 0x90000000) {
     return device[(addr & 0x0f000000) >> 24]->Read8((addr & 0x00ffffff));
   } else {
@@ -781,7 +765,7 @@ uint8_t CPU::ReadDevMem8(uint32_t addr) {
   }
 }
 
-uint16_t CPU::ReadDevMem16(uint32_t addr) {
+inline uint16_t CPU::ReadDevMem16(uint32_t addr) {
   if ((addr & 0xf0000000) == 0x90000000) {
     return device[(addr & 0x0f000000) >> 24]->Read16((addr & 0x00ffffff));
   } else {
@@ -789,7 +773,7 @@ uint16_t CPU::ReadDevMem16(uint32_t addr) {
   }
 }
 
-uint32_t CPU::ReadDevMem32(uint32_t addr) {
+inline uint32_t CPU::ReadDevMem32(uint32_t addr) {
   if ((addr & 0xf0000000) == 0x90000000) {
     return device[(addr & 0x0f000000) >> 24]->Read32((addr & 0x00ffffff));
   } else {
@@ -797,19 +781,19 @@ uint32_t CPU::ReadDevMem32(uint32_t addr) {
   }
 }
 
-void CPU::WriteDevMem8(uint32_t addr, uint8_t data) {
+inline void CPU::WriteDevMem8(uint32_t addr, uint8_t data) {
   if ((addr & 0xf0000000) == 0x90000000) {
     device[(addr & 0x0f000000) >> 24]->Write8((addr & 0x00ffffff), data);
   }
 }
 
-void CPU::WriteDevMem16(uint32_t addr, uint16_t data) {
+inline void CPU::WriteDevMem16(uint32_t addr, uint16_t data) {
   if ((addr & 0xf0000000) == 0x90000000) {
     device[(addr & 0x0f000000) >> 24]->Write16((addr & 0x00ffffff), data);
   }
 }
 
-void CPU::WriteDevMem32(uint32_t addr, uint32_t data) {
+inline void CPU::WriteDevMem32(uint32_t addr, uint32_t data) {
   if ((addr & 0xf0000000) == 0x90000000) {
     device[(addr & 0x0f000000) >> 24]->Write32((addr & 0x00ffffff), data);
   }
@@ -839,31 +823,32 @@ void CPU::WriteMem32(uint32_t addr, uint32_t data) {
  * Execute instructions on the virtual machine in the main emulator execution
  * loop
  */
-void CPU::Step(int32_t steps, uint32_t clock_speed) {
-  uint32_t ins;
-  uint32_t rindex;
-  uint32_t unsigned_imm;
-  uint32_t imm;
-  uint32_t addr;
-  uint32_t paddr;
-  uint32_t rA;
-  uint32_t rB;
-  uint32_t rD;
-  int32_t i;
+void CPU::Step() {
+  register uint32_t ins;
+  register uint32_t rindex;
+  register uint32_t unsigned_imm;
+  register uint32_t imm;
+  register uint32_t addr;
+  register uint32_t paddr;
+  register uint32_t rA;
+  register uint32_t rB;
+  register uint32_t rD;
+  register uint8_t steps;
+  register int8_t i;
+
+  steps = 0xff;
 
   do {
 
     /* Handle timer updates and interrupt handling */
-    if (!(steps & 63)) {
-      if (steps < 0) {
-        break;
-      }
+    if (!steps) {
+      cycle_count += 256; // "clock speed"
 
       // Advance the timer (if enabled)
       if (TTMR & 0xc0000000) {
         uint32_t TTCR_next;
       
-        TTCR_next = TTCR + clock_speed;
+        TTCR_next = TTCR + 256; // "clock speed"
       
         // If timer interrupt is enabled and the timer has passed the match
         // value then pend a timer interrupt.  Note that this differs from
@@ -930,13 +915,15 @@ void CPU::Step(int32_t steps, uint32_t clock_speed) {
         ipage_adj_va = ((tlbtr ^ tlmbr) >> 13) << 11;
       }
     }
+    
+    // <DEBUG>
+    //if ((pc ^ ipage_adj_va) > (sizeof(char) * RAM_SIZE_BYTES)) {
+    //  fprintf(stderr, "ERROR (CPU): instcount=%lld, physical PC=0x%08x is out of memory range\n", debug_instcount, (pc ^ ipage_adj_va) << 2);
+    //}
+    // </DEBUG>
 
-    if ((pc ^ ipage_adj_va) > (sizeof(char) * RAM_SIZE_BYTES)) {
-      fprintf(stderr, "ERROR (CPU): instcount=%lld, physical PC=0x%08x is out of memory range\n", debug_instcount, (pc ^ ipage_adj_va) << 2);
-    }
-      
     /* Fetch the next instruction to execute */
-    ins = ram_uint32[pc ^ ipage_adj_va];
+    ins = ram_uint32[(pc ^ ipage_adj_va) & ((sizeof(char) * RAM_SIZE_BYTES) - 1)];
 
     // <DEBUG>
     //++debug_instcount;
@@ -945,10 +932,11 @@ void CPU::Step(int32_t steps, uint32_t clock_speed) {
       //fprintf(stderr, "%lld: pc=0x%08x, paddr_pc=0x%08x, inst=0x%08x\n", debug_instcount, (pc << 2), ((pc ^ ipage_adj_va) << 2), ins);
       //DisassembleInstr(ins);
     //}
+    //if (debug_point_en) {
+    //  DisassembleInstr(ins);
+    //}
     // </DEBUG>
-    if (debug_point_en) {
-      DisassembleInstr(ins);
-    }
+
     /* Decode and execute the fetched instruction */
     switch ((ins >> 26) & 0x3f) {
     case 0x0:
@@ -1622,7 +1610,7 @@ void CPU::DisassembleInstr(uint32_t ins) {
   uint32_t rB;
   uint32_t result;
   uint32_t idx;
-  int32_t i;
+  int8_t i;
 
   decode_str = (char*)malloc(sizeof(char) * 100);
     
@@ -2097,10 +2085,15 @@ void CPU::DisassembleInstr(uint32_t ins) {
 
 void CPU::OnExtMessage(uint32_t msg) {
   const uint8_t target = (msg >> 24);
+  msg &= 0x00ffffff;
 
   switch (target) {
   case 0x01:
     ((UARTDevice*)uart_device)->ReceiveChar(msg);
+    break;
+
+  case 0x02:
+    // OnKeyPress() -- currently not handled
     break;
 
   case 0x03:
@@ -2109,6 +2102,13 @@ void CPU::OnExtMessage(uint32_t msg) {
 
   case 0x04:
     ((KeyboardDevice*)kb_device)->OnKeyUp(msg);
+    break;
+
+  case 0x05:
+    // Send the current cycle count (in MIPS form) to the messenger and then
+    // reset the count
+    PostMessage(pp::Var(0x01000000 | (int32_t)(cycle_count / 1000000)));
+    cycle_count = 0;
     break;
 
   default:

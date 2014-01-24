@@ -5,6 +5,7 @@
 #ifndef OR_EMULATOR_CPU_HPP_
 #define OR_EMULATOR_CPU_HPP_
 
+#include <atomic>
 #include <mutex>
 
 #include "ppapi/cpp/graphics_2d.h"
@@ -27,7 +28,11 @@ private:
   } regfile_t;
   
 public:
-  // Configuration values
+  /*
+   * Configuration values
+   *
+   * RAM_SIZE_BYTES must be equal to an integer power of 2
+   */
   static const uint32_t RAM_SIZE_BYTES = 128*1024*1024;
   static const uint32_t MAX_HDD_IMAGE_SIZE_BYTES = 200*1024*1024;
   static const uint32_t MAX_DEVICES = 16;
@@ -90,9 +95,11 @@ private:
   uint32_t pc;
   uint32_t next_pc;
 
+  // Cycle counters (shared)
+  std::atomic<uint64_t> cycle_count;
+
   // Branch/interrupt variables
   bool delayed_ins;
-  //bool interrupt_pending;
 
   // Special registers stored individually
   uint32_t TTMR;
@@ -153,8 +160,6 @@ private:
   uint32_t dpage_wr_uint32_adj_va;
 
   // Debug variables
-  // REVISIT: should be private!
-public:
   uint32_t debug_message_count;
   uint64_t debug_instcount;
   bool debug_pause_trace;
@@ -179,14 +184,15 @@ public:
   uint32_t ReadMem32(uint32_t addr);
   void WriteMem32(uint32_t addr, uint32_t data);
 
-  // Execute <steps> opcodes on the virtual CPU 
-  virtual void Step(int32_t steps, uint32_t clock_speed);
+  // Execute opcodes on the virtual CPU.  Should be run in a separate thread
+  // from the main module thread
+  virtual void Step();
 
   /*
    * Signal external messages to the CPU (probably for passing on to devices).
    * Thread-safe
    *
-   * REVISIT: need a list of valid message encodings.  Currently only passes key-press character codes
+   * REVISIT: need a list of valid message encodings.  Currently only passes key-press character codes, along with an identifier in the top byte indicating the sub-type of the key-press event
    */
   void OnExtMessage(uint32_t msg);
 
@@ -205,7 +211,6 @@ public:
 protected:
   virtual void SetFlags(uint32_t x);
   virtual uint32_t GetFlags();
-  //void CheckForInterrupt();
   virtual void SetSPR(uint32_t idx, uint32_t x);
   virtual uint32_t GetSPR(uint32_t idx);
   void Exception(uint32_t except_type, uint32_t addr);

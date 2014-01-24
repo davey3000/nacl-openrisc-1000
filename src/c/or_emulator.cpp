@@ -85,7 +85,7 @@ public:
     // Start the emulator
     // REVISIT: need a mechanism for adjusting the number of instructions executed with each Step() call based on the system speed
     do {
-      orEmulator->cpu->Step(100000, 64);
+      orEmulator->cpu->Step();
     } while (true);
 
     return NULL;

@@ -49,7 +49,7 @@ BIN_IMAGE_DIR := bin
 # Project Build flags
 #
 #WARNINGS := -Wno-long-long -Wall -Wswitch-enum -pedantic -Werror
-WARNINGS := -Wno-long-long -Wall -Wswitch-enum -pedantic
+WARNINGS := -Wno-long-long -Wall -Wswitch-enum -Winline -pedantic 
 LIBS := -lppapi_cpp -lppapi -lnacl_io -lbz2
 
 #
