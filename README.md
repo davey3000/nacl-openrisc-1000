@@ -2,7 +2,7 @@
 
 [![screenshot](https://raw2.github.com/davey3000/nacl-openrisc-1000/gh-pages/img/screenshot01_small.png)](https://raw2.github.com/davey3000/nacl-openrisc-1000/gh-pages/img/screenshot01.png)
 
-**Version:** 0.0.2
+**Version:** 0.1.0
 
 An experimental port of the [JavaScript OpenRISC 1000 emulator](https://github.com/s-macke/jor1k/) to C++ using
 Chrome's NaCl/PNaCl libraries, allowing it to be run in the Chrome browser or
