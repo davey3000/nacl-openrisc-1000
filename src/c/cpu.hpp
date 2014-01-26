@@ -35,7 +35,7 @@ public:
    */
   static const uint32_t RAM_SIZE_BYTES = 128*1024*1024;
   static const uint32_t MAX_HDD_IMAGE_SIZE_BYTES = 200*1024*1024;
-  static const uint32_t MAX_DEVICES = 16;
+  static const uint32_t MAX_DEVICES = 256;
 
   static const uint32_t DEBUG_MESSAGE_LIMIT = 100;
   
@@ -62,7 +62,27 @@ private:
   static const uint32_t EXCEPT_TICK = 0x500; // tick counter interrupt
   static const uint32_t EXCEPT_INT = 0x800; // interrupt of external devices
   static const uint32_t EXCEPT_SYSCALL = 0xc00; // syscall, jump into supervisor mode
-  
+ 
+  // Supervision register bit positions
+  static const uint32_t SR_SM_POS    = 0;
+  static const uint32_t SR_TEE_POS   = 1;
+  static const uint32_t SR_IEE_POS   = 2;
+  static const uint32_t SR_DCE_POS   = 3;
+  static const uint32_t SR_ICE_POS   = 4;
+  static const uint32_t SR_DME_POS   = 5;
+  static const uint32_t SR_IME_POS   = 6;
+  static const uint32_t SR_LEE_POS   = 7;
+  static const uint32_t SR_CE_POS    = 8;
+  static const uint32_t SR_F_POS     = 9;
+  static const uint32_t SR_CY_POS    = 10;
+  static const uint32_t SR_OV_POS    = 11;
+  static const uint32_t SR_OVE_POS   = 12;
+  static const uint32_t SR_DSX_POS   = 13;
+  static const uint32_t SR_EPH_POS   = 14;
+  static const uint32_t SR_FO_POS    = 15;
+  static const uint32_t SR_SUMRA_POS = 16;
+  static const uint32_t SR_CID_POS   = 28; // bits 31-28
+
   // PP instance that created the CPU along with other resources related to the
   // PP instance
   pp::Instance* pp_instance;
@@ -103,24 +123,8 @@ private:
   uint_least32_t PICSR;
 
   // Flags
-  bool SR_SM;
-  bool SR_TEE;
-  bool SR_IEE;
-  bool SR_DCE;
-  bool SR_ICE;
-  bool SR_DME;
-  bool SR_IME;
-  bool SR_LEE;
-  bool SR_CE;
+  uint32_t SR;  // excluding F
   bool SR_F;
-  bool SR_CY;
-  bool SR_OV;
-  bool SR_OVE;
-  bool SR_DSX;
-  bool SR_EPH;
-  bool SR_FO;
-  bool SR_SUMRA;
-  uint32_t SR_CID;
 
   // Mutex used to control access to interrupt registers (PICMR, PICSR,
   // interrupt_pending and SR_IEE)

@@ -123,6 +123,11 @@ public:
 
   virtual void Reset();
 
+  /*
+   * Sets the disk image to be used by the emulated ATA device to the indicate
+   * buffer.  Note that this buffer should have had the bytes in its half-words
+   * pre-swapped for big<->little endian conversion
+   */
   void SetDiskImage(void* buffer, uint32_t sizeBytes);
 
   /*

@@ -107,7 +107,7 @@ uint16_t ATADevice::Read16(uint32_t offset) {
   }
 
   //fprintf(stderr, "%lld: ATA rd: 0x%08x: 0x%04x\n", cpu->debug_instcount, curBufferIndex << 1, util::ByteSwap16(curBuffer[curBufferIndex]));
-  val = util::ByteSwap16(curBuffer[curBufferIndex++]);
+  val = curBuffer[curBufferIndex++];
 
   if (curBufferIndex >= curBufferNextSectorIndex) {
     statusReg = ST_DRDY | ST_DSC; // maybe no DSC for identify command but it works
@@ -211,7 +211,7 @@ void ATADevice::Write16(uint32_t offset, uint16_t data) {
   }
 
   //fprintf(stderr, "ATA wr: 0x%08x: 0x%04x\n", curBufferIndex << 1, data);
-  curBuffer[curBufferIndex++] = util::ByteSwap16(data);
+  curBuffer[curBufferIndex++] = data;
 
   if (curBufferIndex >= curBufferNextSectorIndex) {
     statusReg = ST_DRDY | ST_DSC;
@@ -286,6 +286,11 @@ void ATADevice::SetupInfoBuffer() {
   infoBuffer[84] = (1 << 14);
   infoBuffer[85] = (1 << 14); // Command set/feature enabled (NOP)
   infoBuffer[87] = (1 << 14);
+
+  // Convert from big to little endian (on half-words)
+  for (uint32_t i = 0; i < (sizeof(infoBuffer) / sizeof(infoBuffer[0])); ++i) {
+    infoBuffer[i] = util::ByteSwap16(infoBuffer[i]);
+  }
 }
 
 uint32_t ATADevice::GetSector() {

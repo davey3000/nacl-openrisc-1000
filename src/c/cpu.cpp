@@ -58,26 +58,29 @@ CPU::CPU(pp::Instance* pp_instance)
     device[i] = NULL;
   }
 
-  // Devices are assigned addresses from 0x90000000 onwards.  Device 0 gets
-  // address 0x90000000, device 1 gets 0x91000000, device 2 gets 0x92000000,
-  // etc.
+  // Devices are assigned addresses from 0x00000000 onwards.  Device 0 gets
+  // address 0x00000000, device 1 gets 0x01000000, device 2 gets 0x02000000,
+  // etc.  Devices that overlap with RAM will not be accessible by software
+  // running on the emulated CPU
   uart_device = new UARTDevice(this);
   fb_device = new FrameBufferDevice(pp_instance, this, ram_uint32);
   kb_device = new KeyboardDevice(this);
   ata_device = new ATADevice(this);
 
-  device[0x0] = uart_device;               // 0x90000000
-  device[0x1] = fb_device;                 // 0x91000000
-  device[0x2] = new EthernetDevice(this);  // 0x92000000
-  device[0x3] = new LPC32Device(this);     // 0x93000000
-  device[0x4] = kb_device;                 // 0x94000000
-  device[0xe] = ata_device;                // 0x9e000000
+  device[0x90] = uart_device;               // 0x90000000
+  device[0x91] = fb_device;                 // 0x91000000
+  device[0x92] = new EthernetDevice(this);  // 0x92000000
+  device[0x93] = new LPC32Device(this);     // 0x93000000
+  device[0x94] = kb_device;                 // 0x94000000
+  device[0x9e] = ata_device;                // 0x9e000000
 
   for (i = 0; i < MAX_DEVICES; ++i) {
     if (device[i] == NULL) {
-      device[i] = new DummyDevice(this, 0x90000000 + (i << 24));
+      device[i] = new DummyDevice(this, 0x01000000 * i);
     }
   }
+
+  cycle_count = 0;
 
   debug_message_count = 0;
   debug_instcount = 0;
@@ -122,6 +125,8 @@ inline void CPU::Reset(uint32_t& pc, uint32_t& next_pc) {
   
   pc = next_pc;
   ++next_pc;
+
+  cycle_count = 0;
   
   ipage_va = 0xffffffff;
   dpage_rd_int8_va = 0xffffffff;
@@ -143,25 +148,10 @@ inline void CPU::Reset(uint32_t& pc, uint32_t& next_pc) {
   
   PICMR = 0x3;
   PICSR = 0x0;
-  
-  SR_SM = true;
-  SR_TEE = false;
-  SR_IEE = false;
-  SR_DCE = false;
-  SR_ICE = false;
-  SR_DME = false;
-  SR_IME = false;
-  SR_LEE = false;
-  SR_CE = false;
+
+  SR = (  (1 << SR_SM_POS)
+        | (1 << SR_FO_POS));
   SR_F = false;
-  SR_CY = false;
-  SR_OV = false;
-  SR_OVE = false;
-  SR_DSX = false;
-  SR_EPH = false;
-  SR_FO = true;
-  SR_SUMRA = false;
-  SR_CID = 0;
 }
 
 /*
@@ -246,6 +236,7 @@ bool CPU::LoadHDDImage(const std::string& file_name) {
   if (!fs.fail()) {
     char* buffer;
     char* output_buffer;
+    uint16_t* uint16_output_buffer;
     uint32_t compressed_file_size;
     uint32_t file_size;
     int decompress_result;
@@ -294,6 +285,13 @@ bool CPU::LoadHDDImage(const std::string& file_name) {
     }
 
     if (decompress_result == BZ_OK) {
+      // Convert from big to little endian (on half-words)
+      uint16_output_buffer = (uint16_t*)output_buffer;
+      for (uint32_t i = 0; i < (file_size >> 1); ++i) {
+        uint16_output_buffer[i] = util::ByteSwap16(uint16_output_buffer[i]);
+      }
+
+      // Assign the disk image to the emulated ATA device
       ((ATADevice*)ata_device)->SetDiskImage(output_buffer,
                                              sizeof(char) * file_size);
       
@@ -326,47 +324,35 @@ void CPU::AnalyzeImage() {
 }
 
 inline void CPU::SetFlags(uint32_t x) {
-  //const uint32_t prev_SR_IEE = SR_IEE;
-  const uint32_t prev_SR_DME = SR_DME;
-  const uint32_t prev_SR_IME = SR_IME;
+  const uint32_t prev_SR_DME = SR & (1 << SR_DME_POS);
+  const uint32_t prev_SR_IME = SR & (1 << SR_IME_POS);
 
-  SR_SM = (x & (1 << 0)) ? true : false;
-  SR_TEE = (x & (1 << 1)) ? true : false;
-  SR_IEE = (x & (1 << 2)) ? true : false;
-  SR_DCE = (x & (1 << 3)) ? true : false;
-  SR_ICE = (x & (1 << 4)) ? true : false;
-  SR_DME = (x & (1 << 5)) ? true : false;
-  SR_IME = (x & (1 << 6)) ? true : false;
-  SR_LEE = (x & (1 << 7)) ? true : false;
-  SR_CE = (x & (1 << 8)) ? true : false;
-  SR_F = (x & (1 << 9)) ? true : false;
-  SR_CY = (x & (1 << 10)) ? true : false;
-  SR_OV = (x & (1 << 11)) ? true : false;
-  SR_OVE = (x & (1 << 12)) ? true : false;
-  SR_DSX = (x & (1 << 13)) ? true : false;
-  SR_EPH = (x & (1 << 14)) ? true : false;
-  SR_FO = true;
-  SR_SUMRA = (x & (1 << 16)) ? true : false;
-  SR_CID = (x >> 28) & 0xf;
+  SR = x;
+  SR_F = (x & (1 << SR_F_POS)) ? true : false;
 
-  if (SR_LEE) {
-    DebugMessage("SetFlags() error: little endian not supported");
-  }
-  if (SR_CID) {
-    DebugMessage("SetFlags() error: context ID not supported");
-  }
-  if (SR_EPH) {
-    DebugMessage("SetFlags() error: exception prefix not supported");
-  }
-  if (SR_DSX) {
-    DebugMessage("SetFlags() error: delay slot exception not supported");
+  if (SR & (  (1 << SR_LEE_POS)
+            | (0xf << SR_CID_POS)
+            | (1 << SR_EPH_POS)
+            | (1 << SR_DSX_POS))) {
+    if (SR & (1 << SR_LEE_POS)) {
+      DebugMessage("SetFlags() error: little endian not supported");
+    }
+    if (SR & (0xf << SR_CID_POS)) {
+      DebugMessage("SetFlags() error: context ID not supported");
+    }
+    if (SR & (1 << SR_EPH_POS)) {
+      DebugMessage("SetFlags() error: exception prefix not supported");
+    }
+    if (SR & (1 << SR_DSX_POS)) {
+      DebugMessage("SetFlags() error: delay slot exception not supported");
+    }
   }
 
-  if (!SR_IME && prev_SR_IME) {
+  if (!(SR & (1 << SR_IME_POS)) && prev_SR_IME) {
     ipage_va = 0;
     ipage_adj_va = 0;
   }
-  if (!SR_DME && prev_SR_DME) {
+  if (!(SR & (1 << SR_DME_POS)) && prev_SR_DME) {
     dpage_rd_int8_va = 0;
     dpage_rd_uint8_va = 0;
     dpage_rd_int16_va = 0;
@@ -387,29 +373,8 @@ inline void CPU::SetFlags(uint32_t x) {
 }
 
 inline uint32_t CPU::GetFlags() {
-  //std::lock_guard<std::mutex> lock(interrupt_mutex);
-  uint32_t x = 0;
-
-  x |= SR_SM ? (1 << 0) : 0;
-  x |= SR_TEE ? (1 << 1) : 0;
-  x |= SR_IEE ? (1 << 2) : 0;
-  x |= SR_DCE ? (1 << 3) : 0;
-  x |= SR_ICE ? (1 << 4) : 0;
-  x |= SR_DME ? (1 << 5) : 0;
-  x |= SR_IME ? (1 << 6) : 0;
-  x |= SR_LEE ? (1 << 7) : 0;
-  x |= SR_CE ? (1 << 8) : 0;
-  x |= SR_F ? (1 << 9) : 0;
-  x |= SR_CY ? (1 << 10) : 0;
-  x |= SR_OV ? (1 << 11) : 0;
-  x |= SR_OVE ? (1 << 12) : 0;
-  x |= SR_DSX ? (1 << 13) : 0;
-  x |= SR_EPH ? (1 << 14) : 0;
-  x |= SR_FO ? (1 << 15) : 0;
-  x |= SR_SUMRA ? (1 << 16) : 0;
-  x |= (SR_CID << 28);
-
-  return x;
+  return (SR & (0xffffffff ^ (1 << SR_F_POS)))
+    | (SR_F ? (1 << SR_F_POS) : 0);
 }
 
 void CPU::RaiseInterrupt(uint32_t line) {
@@ -451,7 +416,7 @@ inline void CPU::SetSPR(uint32_t idx, uint32_t x) {
         PICMR = x | 0x3; // we use non maskable interrupt here
         // check immediate for interrupt
         
-        if (SR_IEE & PICMR & PICSR) {
+        if ((SR & (1 << SR_IEE_POS)) & PICMR & PICSR) {
           DebugMessage("Error in SetSPR: Direct triggering of interrupt exception not supported");
         }
       }
@@ -588,19 +553,20 @@ inline uint32_t CPU::GetSPR(uint32_t idx) {
 
 inline void CPU::Exception(uint32_t except_type, uint32_t addr,
                            uint32_t& pc, uint32_t& next_pc) {
-  uint32_t except_vector = except_type | (SR_EPH ? 0xf0000000 : 0x0);
+  uint32_t except_vector = except_type
+    | ((SR & (1 << SR_EPH_POS)) ? 0xf0000000 : 0x0);
 
   //fprintf(stderr, "INFO (CPU): raising exception 0x%03x\n", except_type);
 
   SetSPR(SPR_EEAR_BASE, addr);
   SetSPR(SPR_ESR_BASE, GetFlags());
 
-  SR_OVE = false;
-  SR_SM = true;
-  SR_IEE = false;
-  SR_TEE = false;
-  SR_IME = false;
-  SR_DME = false;
+  SR &= (0xffffffff ^ (  (1 << SR_OVE_POS)
+                       | (1 << SR_IEE_POS)
+                       | (1 << SR_TEE_POS)
+                       | (1 << SR_IME_POS)
+                       | (1 << SR_DME_POS)));
+  SR |= (1 << SR_SM_POS);
 
   ipage_va = 0;
   dpage_rd_int8_va = 0;
@@ -677,7 +643,7 @@ inline uint32_t CPU::DTLBLookup(uint32_t addr, bool write,
   uint32_t tlmbr;
   uint32_t tlbtr;
 
-  if (!SR_DME) {
+  if (!(SR & (1 << SR_DME_POS))) {
     return addr;
   }
 
@@ -700,7 +666,7 @@ inline uint32_t CPU::DTLBLookup(uint32_t addr, bool write,
   tlbtr = spr_dtlb_uint32[0x280 | setindex]; // translate register
 
   // Check for page fault
-  if (SR_SM) {
+  if (SR & (1 << SR_SM_POS)) {
     if (((!write) && !(tlbtr & 0x100)) || // check if SRE
         ((write) && !(tlbtr & 0x200))     // check if SWE
         ) {
@@ -723,7 +689,7 @@ inline uint32_t CPU::DTLBLookupNoExceptions(uint32_t addr, bool write) {
   uint32_t tlmbr;
   uint32_t tlbtr;
     
-  if (!SR_DME) {
+  if (!(SR & (1 << SR_DME_POS))) {
     return addr;
   }
 
@@ -743,7 +709,7 @@ inline uint32_t CPU::DTLBLookupNoExceptions(uint32_t addr, bool write) {
   tlbtr = spr_dtlb_uint32[0x280 | setindex]; // translate register
 
   // Check for page fault
-  if (SR_SM) {
+  if (SR & (1 << SR_SM_POS)) {
     if (((!write) && !(tlbtr & 0x100)) || // check if SRE
         ((write) && !(tlbtr & 0x200))     // check if SWE
         ) {
@@ -760,45 +726,27 @@ inline uint32_t CPU::DTLBLookupNoExceptions(uint32_t addr, bool write) {
 }
 
 inline uint8_t CPU::ReadDevMem8(uint32_t addr) {
-  if ((addr & 0xf0000000) == 0x90000000) {
-    return device[(addr & 0x0f000000) >> 24]->Read8((addr & 0x00ffffff));
-  } else {
-    return 0;
-  }
+  return device[(addr & 0xff000000) >> 24]->Read8((addr & 0x00ffffff));
 }
 
 inline uint16_t CPU::ReadDevMem16(uint32_t addr) {
-  if ((addr & 0xf0000000) == 0x90000000) {
-    return device[(addr & 0x0f000000) >> 24]->Read16((addr & 0x00ffffff));
-  } else {
-    return 0;
-  }
+  return device[(addr & 0xff000000) >> 24]->Read16((addr & 0x00ffffff));
 }
 
 inline uint32_t CPU::ReadDevMem32(uint32_t addr) {
-  if ((addr & 0xf0000000) == 0x90000000) {
-    return device[(addr & 0x0f000000) >> 24]->Read32((addr & 0x00ffffff));
-  } else {
-    return 0;
-  }
+  return device[(addr & 0xff000000) >> 24]->Read32((addr & 0x00ffffff));
 }
 
 inline void CPU::WriteDevMem8(uint32_t addr, uint8_t data) {
-  if ((addr & 0xf0000000) == 0x90000000) {
-    device[(addr & 0x0f000000) >> 24]->Write8((addr & 0x00ffffff), data);
-  }
+  device[(addr & 0xff000000) >> 24]->Write8((addr & 0x00ffffff), data);
 }
 
 inline void CPU::WriteDevMem16(uint32_t addr, uint16_t data) {
-  if ((addr & 0xf0000000) == 0x90000000) {
-    device[(addr & 0x0f000000) >> 24]->Write16((addr & 0x00ffffff), data);
-  }
+  device[(addr & 0xff000000) >> 24]->Write16((addr & 0x00ffffff), data);
 }
 
 inline void CPU::WriteDevMem32(uint32_t addr, uint32_t data) {
-  if ((addr & 0xf0000000) == 0x90000000) {
-    device[(addr & 0x0f000000) >> 24]->Write32((addr & 0x00ffffff), data);
-  }
+  device[(addr & 0xff000000) >> 24]->Write32((addr & 0x00ffffff), data);
 }
 
 uint32_t CPU::ReadMem32(uint32_t addr) {
@@ -874,7 +822,7 @@ void CPU::Run() {
 
       // If a timer interrupt is pending and enabled then raise it
       if (TTMR & 0x10000000) {
-        if (SR_TEE) {
+        if (SR & (1 << SR_TEE_POS)) {
           Exception(EXCEPT_TICK, spr_generic_uint32[SPR_EEAR_BASE], pc, next_pc);
           pc = next_pc++;
         }
@@ -883,7 +831,7 @@ void CPU::Run() {
         // raise it
         std::lock_guard<std::mutex> lock(interrupt_mutex);
 
-        if (SR_IEE && (PICMR & PICSR)) {
+        if ((SR & (1 << SR_IEE_POS)) && (PICMR & PICSR)) {
           Exception(EXCEPT_INT, spr_generic_uint32[SPR_EEAR_BASE], pc, next_pc);
           pc = next_pc++;
         }
@@ -894,7 +842,7 @@ void CPU::Run() {
     if ((ipage_va ^ pc) >> 11) {
       ipage_va = pc;
         
-      if (!SR_IME) {
+      if (!(SR & (1 << SR_IME_POS))) {
         // Page tables not enabled so VA == PA
         ipage_adj_va = 0;
       } else {
@@ -1526,18 +1474,14 @@ void CPU::Run() {
         break;
       case 0x30a:
         // divu (specification seems to be wrong)
-        SR_CY = rB == 0;
-        SR_OV = false;
-        if (!SR_CY) {
+        if (rB != 0) {
           rf.r[rindex] = rA / rB;
           //fprintf(stderr, "%lld: l.divu %u / %u = %u -- 0x%08x / 0x%08x = 0x%08x\n", debug_instcount, rA, rB, rf.r[rindex], rA, rB, rf.r[rindex]);
         }
         break;
       case 0x309:
         // div (specification seems to be wrong)
-        SR_CY = rB == 0;
-        SR_OV = false;
-        if (!SR_CY) {
+        if (rB != 0) {
           rf.r[rindex] = (int32_t)rA / (int32_t)rB;
           //fprintf(stderr, "%lld: l.div %d / %d = %d -- 0x%08x / 0x%08x = 0x%08x\n", debug_instcount, (int32_t)rA, (int32_t)rB, (int32_t)rf.r[rindex], (int32_t)rA, (int32_t)rB, (int32_t)rf.r[rindex]);
         }
@@ -2116,7 +2060,8 @@ void CPU::OnExtMessage(uint32_t msg) {
   case 0x05:
     // Send the current cycle count (in MIPS form) to the messenger and then
     // reset the count
-    PostMessage(pp::Var(0x01000000 | (int32_t)(cycle_count / 1000000)));
+    PostMessage(pp::Var(0x01000000 | ((int32_t)(cycle_count / 1000000) & 0x00ffffff)));
+    //PostMessage(pp::Var(0x01000000 | ((int32_t)(cycle_count) & 0x00ffffff)));
     cycle_count = 0;
     break;
 
