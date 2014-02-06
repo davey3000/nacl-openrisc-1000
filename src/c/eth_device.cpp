@@ -6,8 +6,9 @@
 
 #include "eth_device.hpp"
 
-EthernetDevice::EthernetDevice(CPU* cpu) :
-  cpu(cpu)
+EthernetDevice::EthernetDevice(CPU* cpu, uint32_t* ram) :
+  cpu(cpu),
+  ram(ram)
 {
   Reset();
 }
@@ -43,6 +44,8 @@ void EthernetDevice::Reset() {
   ethHash0AdrReg = 0x0;
   ethHash1AdrReg = 0x0;
   ethTxCtrlReg = 0x0;
+
+  memset(bd, 0, sizeof(bd));
 
   curRX = (txBDNumReg << 1);
 }
@@ -157,8 +160,8 @@ uint32_t EthernetDevice::Read32(uint32_t offset) {
   default:
     if (offset >= ADDR_BD_START &&
         offset <= ADDR_BD_END) {
-      //retVal = BD[(offset-ADDR_BD_START)>>>2];
-      retVal = 0;
+
+      retVal = bd[(offset - ADDR_BD_START) >> 2];
     } else {
       cpu->DebugMessage("INFO (eth): 32-bit read of offset 0x%08x not supported", offset);
       retVal = 0;
@@ -281,28 +284,75 @@ void EthernetDevice::Write32(uint32_t offset, uint32_t data) {
     break;
 
   default:
+    // Check for buffer descriptor write
     if (offset >= ADDR_BD_START &&
         offset <= ADDR_BD_END) {
 
-      /*BD[(addr-ADDR_BD_START)>>>2] = data;
+      uint32_t bdNum = ((offset - ADDR_BD_START) >> 3);
 
-      //which buffer descriptor?
-      var BD_NUM = (addr - ADDR_BD_START)>>>3;
-                    
-      //make sure this isn't the pointer portion
-      if (((BD_NUM << 3) + ADDR_BD_START) == addr) {
-        //did we just set the ready/empty bit?
-        if ((data & (1 << 15)) != 0) {
-          //TX, or RX?
-          if (BD_NUM < TX_BD_NUM) {
-            //TX BD
-            Transmit(BD_NUM);
-          }
-        }
-      }*/
+      bd[(offset - ADDR_BD_START) >> 2] = data;
+
+      // Check for packet transmission request
+      if ((offset == ((bdNum << 3) + ADDR_BD_START))
+          && ((data & (1 << 15)) != 0)
+          && (bdNum < txBDNumReg)) {
+        Transmit(bdNum);
+      }
+
     } else {
       cpu->DebugMessage("INFO (eth): 32-bit write to offset 0x%08x not supported -- data 0x%08x", offset, data);
     }
     break;
+  }
+}
+
+void EthernetDevice::Transmit(uint32_t bdNum) {
+  fprintf(stderr, "DEBUG(eth): Packet transmission -- buffer descriptor: 0x%08x, 0x%08x\n", bd[0], bd[1]);
+
+  // Check that transmitting is enabled
+  if (!(moderReg & MODER_TXEN)) {
+    return;
+  }
+
+  uint32_t status = bd[bdNum << 1];
+  uint32_t ramPtr = bd[(bdNum << 1) + 1];
+
+  // Check descriptor is ready for transmission
+  if (!(status & TX_BD_READY)) {
+    return;
+  }
+
+  uint32_t frameSize = ((status & TX_BD_LEN_MASK) >> TX_BD_LEN_POS);
+  
+  // Pad frame to minimum size if necessary
+  if (((status & TX_BD_PAD) || (moderReg & MODER_PAD))
+      && ((packetLenReg >> 16) > frameSize)) {
+    frameSize = (packetLenReg >> 16);
+  }
+
+  // REVISIT: actually transmit the frame
+  //fprintf(stderr, "DEBUG(eth): Sending frame -- length: %d bytes, first bytes: 0x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n", frameSize, ram[ramPtr], ram[ramPtr+1], ram[ramPtr+2], ram[ramPtr+3], ram[ramPtr+4], ram[ramPtr+5], ram[ramPtr+6], ram[ramPtr+7], ram[ramPtr+8], ram[ramPtr+9], ram[ramPtr+10], ram[ramPtr+11], ram[ramPtr+12], ram[ramPtr+13], ram[ramPtr+14], ram[ramPtr+15], ram[ramPtr+16], ram[ramPtr+17], ram[ramPtr+18], ram[ramPtr+19], ram[ramPtr+20], ram[ramPtr+21], ram[ramPtr+22], ram[ramPtr+23], ram[ramPtr+24], ram[ramPtr+25], ram[ramPtr+26], ram[ramPtr+27], ram[ramPtr+28], ram[ramPtr+29], ram[ramPtr+30], ram[ramPtr+31]);
+  fprintf(stderr, "DEBUG(eth): Sending frame -- length: %d bytes, first bytes: 0x%08x%08x%08x%08x%08x%08x%08x%08x\n", frameSize, ram[ramPtr>>2], ram[(ramPtr>>2)+1], ram[(ramPtr>>2)+2], ram[(ramPtr>>2)+3], ram[(ramPtr>>2)+4], ram[(ramPtr>>2)+5], ram[(ramPtr>>2)+6], ram[(ramPtr>>2)+7]);
+
+  
+
+  // Update the status bits to indicate the frame was sent successfully and
+  // clear its "ready" status
+  status &= ~(TX_BD_CS);
+  status &= ~(TX_BD_DF);
+  status &= ~(TX_BD_LC);
+  status &= ~(TX_BD_RL);
+  status &= ~(TX_BD_RETRY_MASK);
+  status &= ~(TX_BD_UR);
+  status &= ~(TX_BD_READY);
+  
+  bd[bdNum << 1] = status;
+
+  // Raise/clear interrupt
+  intSourceReg |= 1;
+  if (intMaskReg & intSourceReg) {
+    cpu->RaiseInterrupt(4);
+  } else {
+    cpu->ClearInterrupt(4);
   }
 }

@@ -66,10 +66,11 @@ CPU::CPU(pp::Instance* pp_instance)
   fb_device = new FrameBufferDevice(pp_instance, this, ram_uint32);
   kb_device = new KeyboardDevice(this);
   ata_device = new ATADevice(this);
+  eth_device = new EthernetDevice(this, ram_uint32);
 
   device[0x90] = uart_device;               // 0x90000000
   device[0x91] = fb_device;                 // 0x91000000
-  device[0x92] = new EthernetDevice(this);  // 0x92000000
+  device[0x92] = eth_device;                // 0x92000000
   device[0x93] = new LPC32Device(this);     // 0x93000000
   device[0x94] = kb_device;                 // 0x94000000
   device[0x9e] = ata_device;                // 0x9e000000

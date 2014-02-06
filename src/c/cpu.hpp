@@ -109,6 +109,7 @@ private:
   Device* fb_device;
   Device* ata_device;
   Device* kb_device;
+  Device* eth_device;
 
   // Cycle counters (shared)
   std::atomic<uint64_t> cycle_count;
