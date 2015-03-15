@@ -1,6 +1,6 @@
 # NaCl/PNaCl OpenRISC 1000 Emulator
 
-[![screenshot](https://raw2.github.com/davey3000/nacl-openrisc-1000/gh-pages/img/screenshot01_small.png)](https://raw2.github.com/davey3000/nacl-openrisc-1000/gh-pages/img/screenshot01.png)
+[![Screenshot](http://davey3000.github.io/nacl-openrisc-1000/img/screenshot01.png)](http://davey3000.github.io/nacl-openrisc-1000/img/screenshot01.png)
 
 **Version:** 0.1.0
 
