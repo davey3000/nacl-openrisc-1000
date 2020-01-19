@@ -2,7 +2,7 @@
 
 [![Screenshot](http://davey3000.github.io/nacl-openrisc-1000/img/screenshot01.png)](http://davey3000.github.io/nacl-openrisc-1000/img/screenshot01.png)
 
-**DEPRECATION WARNING:** NaCL and PNaCL have been deprecated, so this project may
+> **DEPRECATION WARNING:** NaCL and PNaCL have been deprecated, so this project may
 no longer function in a modern version of Chrome.  The project remains here for
 posterity, as an example of how NaCl and PNaCL were used.
 
